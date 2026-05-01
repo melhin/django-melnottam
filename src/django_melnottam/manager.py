@@ -52,7 +52,6 @@ class InterpreterPoolManager:
 
             # Update the config with queues and parent reference
             config.shutdown_queue = shutdown_queue
-            config.worker_queue = create_queue()
             config.parent_shutdown_queue = self._parent_shutdown_queue
 
             # Get task function and kwargs from config

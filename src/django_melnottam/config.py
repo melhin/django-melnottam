@@ -14,7 +14,6 @@ class WebWorkerConfig:
     bind: str = "127.0.0.1:8000"
     insecure_sockets: tuple = ()
     shutdown_queue: Optional[Queue] = None
-    worker_queue: Optional[Queue] = None
     parent_shutdown_queue: Optional[Queue] = None
     django_settings_module: Optional[str] = None
 
@@ -32,7 +31,6 @@ class WebWorkerConfig:
             "bind": self.bind,
             "insecure_sockets": self.insecure_sockets,
             "shutdown_queue": self.shutdown_queue,
-            "worker_queue": self.worker_queue,
             "parent_shutdown_queue": self.parent_shutdown_queue,
             "django_settings_module": self.django_settings_module,
         }
@@ -45,7 +43,6 @@ class TaskWorkerConfig:
     worker_number: int
     log_level: int
     shutdown_queue: Optional[Queue] = None
-    worker_queue: Optional[Queue] = None
     parent_shutdown_queue: Optional[Queue] = None
     django_settings_module: Optional[str] = None
 
@@ -59,7 +56,6 @@ class TaskWorkerConfig:
             "worker_number": self.worker_number,
             "log_level": self.log_level,
             "shutdown_queue": self.shutdown_queue,
-            "worker_queue": self.worker_queue,
             "parent_shutdown_queue": self.parent_shutdown_queue,
             "django_settings_module": self.django_settings_module,
         }

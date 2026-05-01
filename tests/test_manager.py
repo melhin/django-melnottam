@@ -31,7 +31,6 @@ def test_start_worker_creates_queues(mock_executor_class):
 
     assert len(manager.shutdown_queues) == 1
     assert config.shutdown_queue is not None
-    assert config.worker_queue is not None
 
     assert len(manager.futures) == 1
     assert manager.futures[0] == mock_future

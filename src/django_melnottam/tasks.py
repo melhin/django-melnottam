@@ -136,7 +136,7 @@ def shutdown_monitor_task(
                     )
                     break
                 continue
-            except (OSError, RuntimeError):
+            except OSError, RuntimeError:
                 time.sleep(0.1)
     except Exception as e:
         logger.debug("Shutdown monitor error: %s", e)
@@ -150,7 +150,6 @@ def web_worker_task(
     bind: str,
     insecure_sockets: tuple,
     shutdown_queue: Queue,
-    worker_queue: Queue,
     parent_shutdown_queue: Optional[Queue] = None,
     django_settings_module: Optional[str] = None,
 ) -> None:
@@ -236,7 +235,6 @@ def task_worker_task(
     worker_number: int,
     log_level: int,
     shutdown_queue: Queue,
-    worker_queue: Queue,
     parent_shutdown_queue: Optional[Queue] = None,
     django_settings_module: Optional[str] = None,
 ) -> None:
@@ -273,7 +271,6 @@ def task_worker_task(
             max_tasks=None,
             worker_id=f"task_worker_{worker_number}",
         )
-        logger.info("Task worker configured with queue: %s", worker_queue)
 
         signal_thread = create_shutdown_monitor_thread(
             shutdown_queue,
