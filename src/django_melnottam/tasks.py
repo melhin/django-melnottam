@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import signal
 import threading
@@ -175,7 +176,12 @@ def web_worker_task(
         """Callback to handle web worker shutdown."""
         logger.info("Shutdown signal received")
         worker_shutdown_event.set()
-        thread_shutdown_event.set()
+
+        # Cancel all running tasks
+        loop = asyncio.get_event_loop()
+        for task in asyncio.all_tasks(loop):
+            task.cancel()
+
         if parent_shutdown_queue:
             parent_shutdown_queue.put("shutdown")
 
