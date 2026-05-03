@@ -12,6 +12,7 @@ from rich.logging import RichHandler
 
 from .config import TaskWorkerConfig, WebWorkerConfig
 from .exceptions import WorkerInitializationError
+from .logging_utils import get_log_level
 
 logging.basicConfig(
     level=logging.INFO, format="[pool_manager] %(message)s", handlers=[RichHandler()]
@@ -118,7 +119,7 @@ class InterpreterPoolManager:
             # Create web worker config
             web_config = WebWorkerConfig(
                 worker_number=i + 1,
-                log_level=logger.level,
+                log_level=get_log_level(),
                 application_path=app_path,
                 workers=workers,
                 bind=bind,
@@ -146,7 +147,7 @@ class InterpreterPoolManager:
         configs = [
             TaskWorkerConfig(
                 worker_number=i + 1,
-                log_level=logger.level,
+                log_level=get_log_level(),
                 django_settings_module=self.django_settings_module,
             )
             for i in range(num_workers)

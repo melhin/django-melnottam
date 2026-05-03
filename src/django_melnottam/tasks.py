@@ -10,38 +10,44 @@ import django
 from hypercorn.asyncio.run import asyncio_worker
 from hypercorn.config import Config, Sockets
 
+from .logging_utils import get_log_level
 
-def setup_worker_logging(worker_number: int, log_level: int, worker_type: str) -> logging.Logger:
+
+def setup_worker_logging(
+    worker_number: int, log_level: Optional[int] = None, worker_type: str = "worker"
+) -> logging.Logger:
     """
     Setup logging for a worker process.
 
     Args:
         worker_number: The worker number
-        log_level: The logging level
+        log_level: The logging level (defaults to DEBUG if Django DEBUG=True, INFO otherwise)
         worker_type: Descriptive name of the worker type
 
     Returns:
         Configured logger instance
     """
-    # Get the root logger instead of relying on basicConfig
-    root_logger = logging.getLogger()
+    # Determine log level from Django DEBUG setting if not provided
+    log_level = get_log_level(log_level)
 
-    # Clear existing handlers to avoid duplicates
-    root_logger.handlers = []
+    # Create a logger specific to the worker, not the root logger
+    logger = logging.getLogger(f"worker.{worker_type.lower()}.{worker_number}")
 
-    # Set the level on the root logger
-    root_logger.setLevel(log_level)
+    # Only add a handler if one doesn't already exist
+    if not logger.handlers:
+        handler = logging.StreamHandler()
+        formatter = logging.Formatter(f"%(asctime)s {worker_type}-[{worker_number}] %(message)s")
+        handler.setFormatter(formatter)
+        handler.setLevel(log_level)
+        logger.addHandler(handler)
 
-    # Create and configure the handler
-    handler = logging.StreamHandler()
-    formatter = logging.Formatter(f"%(asctime)s {worker_type}-[{worker_number}] %(message)s")
-    handler.setFormatter(formatter)
-    handler.setLevel(log_level)
+    # Set the level on the logger itself
+    logger.setLevel(log_level)
 
-    # Add the handler to the root logger
-    root_logger.addHandler(handler)
+    # Prevent propagation to root logger to avoid duplicate logs
+    logger.propagate = True
 
-    return logging.getLogger(__name__)
+    return logger
 
 
 def create_shutdown_monitor_thread(
@@ -215,7 +221,6 @@ def web_worker_task(
         )
         signal_thread.start()
 
-        logger.debug("Starting asyncio worker")
         asyncio_worker(
             worker_config,
             worker_hypercorn_sockets,
