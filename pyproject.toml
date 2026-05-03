@@ -54,7 +54,7 @@ dev = [
 ]
 
 [project.scripts]
-server-subinterpreter-worker = "django_melnottam.cli:main"
+django-melnottam-cli = "django_melnottam.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/melhin/subinterpreter-workers"

@@ -27,7 +27,7 @@ def setup_django():
 def main():
     parser = argparse.ArgumentParser(
         description="Django application with InterpreterPoolExecutor worker management",
-        prog="server-subinterpreter-worker",
+        prog="django-melnottam-cli",
     )
     parser.add_argument(
         "application",

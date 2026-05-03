@@ -44,7 +44,7 @@ pip install git+https://github.com/yourusername/django-subinterpreter-workers.gi
 ### Command Line Interface
 
 ```bash
-server-subinterpreter-worker <application> [options]
+django-melnottam-cli <application> [options]
 ```
 
 #### Arguments
@@ -62,7 +62,7 @@ server-subinterpreter-worker <application> [options]
 #### Example
 
 ```bash
-server-subinterpreter-worker myapp.wsgi:application \
+django-melnottam-cli myapp.wsgi:application \
   --workers 4 \
   --task-workers 2 \
   --bind 0.0.0.0:8000 \
