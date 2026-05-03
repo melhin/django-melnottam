@@ -160,60 +160,41 @@ class InterpreterPoolManager:
             return
 
         self._shutdown_requested = True
-        logger.info("Shutting down worker pool with timeout %.1fs...", timeout)
+        logger.info("Shutting down worker pool (timeout: %.1fs)", timeout)
 
-        # Send stop signals to all workers
-        logger.info("Sending stop signals to %d workers...", len(self.shutdown_queues))
+        # Send stop signals
         for i, queue in enumerate(self.shutdown_queues):
             try:
                 queue.put("stop")
-                logger.debug("Stop signal sent to worker %d", i + 1)
             except Exception as e:
                 logger.warning("Failed to send stop signal to worker %d: %s", i + 1, e)
 
-        # Give workers time to process shutdown signal
-        logger.debug("Waiting 500ms for workers to process shutdown signal...")
-        time.sleep(0.5)
+        time.sleep(0.5)  # Give workers time to process
 
-        # Wait for futures to complete
-        logger.info("Waiting for %d worker futures to complete...", len(self.futures))
+        # Wait for futures
         start_time = time.time()
-        completed = 0
         for i, future in enumerate(self.futures):
-            remaining_timeout = max(0, timeout - (time.time() - start_time))
+            remaining = max(0, timeout - (time.time() - start_time))
             try:
-                future.result(timeout=remaining_timeout)
-                completed += 1
-                logger.debug("Worker future %d completed successfully", i + 1)
+                future.result(timeout=remaining)
             except Exception as e:
-                logger.warning(f"Worker future {i + 1} error: {e}")
+                logger.warning("Worker future %d failed: %s", i + 1, e)
 
-        logger.info("Completed %d/%d worker futures", completed, len(self.futures))
-
-        # Shutdown the executor
+        # Shutdown executor
         if self.executor:
-            logger.info("Shutting down InterpreterPoolExecutor...")
             try:
                 self.executor.shutdown(wait=True, cancel_futures=True)
-                logger.info("Pool executor shutdown complete")
             except Exception as e:
-                logger.warning(f"Error during executor shutdown: {e}")
-        else:
-            logger.warning("Executor was already None during shutdown")
+                logger.warning("Executor shutdown error: %s", e)
 
-        # Give subinterpreters time to clean up
-        logger.debug("Waiting 500ms for subinterpreters to clean up...")
-        time.sleep(0.5)
+        time.sleep(0.5)  # Cleanup time
 
-        # Close any tracked interpreters
-        if self._interpreters_to_close:
-            logger.info("Closing %d tracked interpreters...", len(self._interpreters_to_close))
-            for i, interp in enumerate(self._interpreters_to_close):
-                try:
-                    interp.close()
-                    logger.debug("Interpreter %d closed successfully", i + 1)
-                except Exception as e:
-                    logger.debug(f"Error closing interpreter {i + 1}: {e}")
+        # Close interpreters
+        for i, interp in enumerate(self._interpreters_to_close):
+            try:
+                interp.close()
+            except Exception as e:
+                logger.debug("Error closing interpreter %d: %s", i + 1, e)
 
         logger.info("Worker pool shutdown complete")
 

@@ -1,4 +1,3 @@
-import asyncio
 import logging
 import signal
 import threading
@@ -24,11 +23,24 @@ def setup_worker_logging(worker_number: int, log_level: int, worker_type: str) -
     Returns:
         Configured logger instance
     """
-    logging.basicConfig(
-        level=log_level,
-        format=f"%(asctime)s {worker_type}-[{worker_number}] %(message)s",
-        handlers=[logging.StreamHandler()],
-    )
+    # Get the root logger instead of relying on basicConfig
+    root_logger = logging.getLogger()
+
+    # Clear existing handlers to avoid duplicates
+    root_logger.handlers = []
+
+    # Set the level on the root logger
+    root_logger.setLevel(log_level)
+
+    # Create and configure the handler
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter(f"%(asctime)s {worker_type}-[{worker_number}] %(message)s")
+    handler.setFormatter(formatter)
+    handler.setLevel(log_level)
+
+    # Add the handler to the root logger
+    root_logger.addHandler(handler)
+
     return logging.getLogger(__name__)
 
 
@@ -120,7 +132,7 @@ def shutdown_monitor_task(
     try:
         while True:
             try:
-                msg = shutdown_queue.get(timeout=0.5)
+                msg = shutdown_queue.get(timeout=10)
                 if msg == "stop":
                     logger.info(
                         "Received stop signal - %s %d shutting down", worker_type, worker_number
@@ -176,11 +188,6 @@ def web_worker_task(
         """Callback to handle web worker shutdown."""
         logger.info("Shutdown signal received")
         worker_shutdown_event.set()
-
-        # Cancel all running tasks
-        loop = asyncio.get_event_loop()
-        for task in asyncio.all_tasks(loop):
-            task.cancel()
 
         if parent_shutdown_queue:
             parent_shutdown_queue.put("shutdown")
