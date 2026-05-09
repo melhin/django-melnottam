@@ -38,11 +38,20 @@ class SubinterpreterWorkerServer(BaseServerBackend):
         workers = self.melnottam_args.get("workers", 4)
         task_workers = self.melnottam_args.get("task_workers", 2)
         bind = self.melnottam_args.get("bind", "0.0.0.0:8000")
+        app_path = self.melnottam_args.get("app_path")
+        django_settings_module = self.melnottam_args.get("django_settings_module")
+
+        if not app_path:
+            raise ValueError("'app_path' is required in ARGS. Example: 'myapp.wsgi:application'")
+        if not django_settings_module:
+            raise ValueError(
+                "'django_settings_module' is required in ARGS. Example: 'myapp.settings'"
+            )
 
         run_application(
-            app_path="simple_local_tasks_queue.wsgi:application",
+            app_path=app_path,
             workers=workers,
             task_workers=task_workers,
             bind=bind,
-            django_settings_module="simple_local_tasks_queue.settings",
+            django_settings_module=django_settings_module,
         )
