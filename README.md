@@ -4,7 +4,7 @@ A Python package for managing Django application workers using `InterpreterPoolE
 
 ## Overview
 
-`django-subinterpreter-workers` manages multiple worker processes using Python 3.14's `concurrent.futures.InterpreterPoolExecutor`. It provides:
+`django-melnottam` manages multiple worker processes using Python 3.14's `concurrent.futures.InterpreterPoolExecutor`. It provides:
 
 - **Web Workers**: ASGI/WSGI application servers using Hypercorn
 - **Task Workers**: Django task queue workers using `django-tasks-db`
@@ -15,12 +15,9 @@ A Python package for managing Django application workers using `InterpreterPoolE
 ## Features
 
 - ✅ Multiple web and task workers managed in a single pool
-- ✅ Automatic socket duplication for web worker binding
 - ✅ Shared shutdown coordination via inter-interpreter queues
 - ✅ Configurable worker counts and binding addresses
-- ✅ Rich logging with timestamps and worker identification
 - ✅ Django settings module support
-- ✅ Graceful shutdown with configurable timeouts
 
 ## Requirements
 
@@ -113,6 +110,69 @@ pool.start_worker(task_config)
 pool.shutdown(timeout=10.0)
 ```
 
+## Preferred Deployment
+
+This library includes a built-in `django-prodserver` backend that provides the recommended way to deploy your Django application with web and task workers.
+
+### Production Deployment Command
+
+To use the preferred deployment method with `django-prodserver`, run the following command with environment variable substitution:
+
+```bash
+BIND_ADDRESS="0.0.0.0:$PORT" WORKERS="$WORKERS" TASK_WORKERS="$INSTANCE_TASK_WORKERS" python manage.py prodserver web-with-task-worker
+```
+
+### Configuration in Django Settings
+
+Ensure your `settings.py` includes the production process configuration:
+
+```python
+from django_melnottam.config import PositiveIntegerValue, Value
+
+INSTALLED_APPS = [
+    # ...
+    "django_tasks_db",
+    "django_prodserver",
+    # ...
+]
+
+TASKS = {
+    "default": {
+        "BACKEND": "django_tasks_db.DatabaseBackend",
+        "QUEUES": ["default"],
+    }
+}
+
+# Production process configuration with command-line parameter support
+
+PRODUCTION_PROCESSES = {
+    "web-with-task-worker": {
+        "BACKEND": "django_melnottam.prodserver_backends.subinterpreter.SubinterpreterWorkerServer",
+        "ARGS": {
+            "app_path": "myapp.wsgi:application",
+            "django_settings_module": "myapp.settings",
+            "workers": WORKERS,
+            "task_workers": TASK_WORKERS,
+            "bind": BIND_ADDRESS,
+        },
+    },
+}
+```
+
+### Environment Variables
+
+- `PORT`: The port to bind to (e.g., `8000`)
+- `WORKERS`: Number of web workers (e.g., `4`)
+- `INSTANCE_TASK_WORKERS`: Number of task workers (e.g., `2`)
+
+### Why Use This Backend?
+
+The `SubinterpreterWorkerServer` backend provides:
+- Built-in support for multiple web and task workers
+- Automatic worker management and coordination
+- Graceful shutdown handling
+- Integration with `django-prodserver` for seamless deployment
+
 ## Configuration
 
 ### Django Settings
@@ -187,47 +247,3 @@ The package provides custom exceptions for error handling:
 - `HookExecutionError`: Hook execution failed
 - `TaskExecutionError`: Task execution failed
 - `PoolExecutionError`: Pool-level error
-
-## Development
-
-### Setup Development Environment
-
-```bash
-uv sync --all-extras
-```
-
-
-## Running Tests
-
-### Run All Tests
-```bash
-uv run pytest
-```
-
-
-### Code Quality
-
-```bash
-# Format code
-ruff format .
-
-# Lint and fix
-ruff check . --fix
-```
-
-## Troubleshooting
-
-### Workers Not Starting
-- Check Django settings module is valid
-- Verify application path is correct
-- Check logs for detailed error messages
-- Use `--verbose` flag for debug output
-
-### Memory Usage High
-- Reduce `max_workers` count
-- Check for memory leaks in application code
-- Monitor with `ps aux | grep python`
-
-### Slow Task Processing
-- Increase `--task-workers`
-- Check task queue backend is properly configured
