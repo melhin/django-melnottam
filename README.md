@@ -1,5 +1,7 @@
 # Django Melnottam
 
+⚠️ **EXPERIMENTAL** - This library is still in early development. APIs are subject to change without notice. Use at your own risk and with caution in production environments.
+
 A Python package for managing Django application workers using `InterpreterPoolExecutor` from Python 3.14+. This package provides a clean abstraction for running web and task workers in isolated Python interpreters.
 
 ## Overview
@@ -234,7 +236,6 @@ The `InterpreterPoolExecutor` manages a pool of Python interpreters:
 5. InterpreterPoolExecutor shuts down
 6. Subinterpreters are cleaned up
 
-Timeout is configurable (default: 5 seconds per worker).
 
 ## Exceptions
 
