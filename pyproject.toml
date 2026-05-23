@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "django-melnottam"
-version = "0.1.4"
+version = "0.1.1"
 description = "A Python package for managing Django application workers using InterpreterPoolExecutor"
 readme = "README.md"
 requires-python = ">=3.14"
@@ -138,10 +138,3 @@ ignore_missing_imports = true
 dev = [
     "pytest>=9.0.3",
 ]
-
-
-[[tool.uv.index]]
-name = "testpypi"
-url = "https://test.pypi.org/simple/"
-publish-url = "https://test.pypi.org/legacy/"
-explicit = true
