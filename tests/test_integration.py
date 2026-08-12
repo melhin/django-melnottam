@@ -2,6 +2,7 @@ import logging
 import time
 
 import pytest
+
 from django_melnottam.config import TaskWorkerConfig
 from django_melnottam.manager import InterpreterPoolManager
 

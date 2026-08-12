@@ -106,6 +106,14 @@ ignore = [
     "B006",  # do not use mutable data structures for argument defaults
 ]
 
+[tool.pytest.ini_options]
+markers = [
+    "e2e: end-to-end tests that spawn real worker subprocesses (slow, opt-in via -m e2e)",
+]
+# Don't let pytest import the e2e Django app modules as tests.
+norecursedirs = ["tests/e2e_app", "tests/e2e_app/migrations"]
+python_files = ["test_*.py"]
+
 [tool.ruff.lint.isort]
 known-first-party = ["django-melnottam"]
 
@@ -136,5 +144,7 @@ ignore_missing_imports = true
 
 [dependency-groups]
 dev = [
+    "pre-commit>=4.6.0",
     "pytest>=9.0.3",
+    "ruff>=0.15.12",
 ]

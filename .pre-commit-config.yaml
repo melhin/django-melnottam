@@ -1,0 +1,25 @@
+repos:
+    # Ruff: lint (check-only, no auto-fix on commit) and format check.
+    # Auto-fixing belongs in an explicit `ruff check --fix` / editor save action,
+    # not a pre-commit hook that silently rewrites staged files.
+    - repo: https://github.com/astral-sh/ruff-pre-commit
+      rev: v0.15.12
+      hooks:
+          - id: ruff
+            # `ruff check` is check-only by default; we deliberately do NOT pass
+            # --fix here so commits surface issues rather than silently rewrite
+            # staged files. Run `uv run ruff check --fix` manually to apply fixes.
+          - id: ruff-format
+            args: [--check]
+
+    # Pytest: run the full suite via uv so it picks up the project venv
+    # (Django, django_tasks_db, etc.). Failing tests block the commit.
+    - repo: local
+      hooks:
+          - id: pytest
+            name: pytest (uv run)
+            entry: uv run pytest tests/ -q
+            language: system
+            types: [python]
+            pass_filenames: false
+            stages: [pre-commit]

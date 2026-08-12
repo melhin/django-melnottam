@@ -7,7 +7,7 @@ import django
 from django.conf import settings
 from rich.logging import RichHandler
 
-from django_melnottam.manager import run_application
+from django_melnottam.manager import PoolType, run_application
 
 logging.basicConfig(
     level=logging.INFO,
@@ -70,6 +70,15 @@ def main():
         default=None,
         type=str,
     )
+    parser.add_argument(
+        "-p",
+        "--pool",
+        choices=[p.value for p in PoolType],
+        default=PoolType.INTERPRETER.value,
+        help="Concurrency backend: 'interpreter' (subinterpreters) or "
+        "'process' (subprocesses). Defaults to interpreter.",
+        type=str,
+    )
 
     args = parser.parse_args()
 
@@ -93,6 +102,7 @@ def main():
         task_workers=args.task_workers,
         bind=args.bind,
         django_settings_module=args.settings,
+        pool_type=PoolType(args.pool),
     )
     sys.exit(0)
 

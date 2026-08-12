@@ -1,11 +1,15 @@
-from concurrent.interpreters import Queue
 from dataclasses import dataclass
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 
 @dataclass
 class WebWorkerConfig:
-    """Configuration for WSGI application worker."""
+    """Configuration for WSGI application worker.
+
+    Works with both subinterpreter and process pools: ``shutdown_queue``
+    and ``parent_shutdown_queue`` accept either ``concurrent.interpreters.Queue``
+    or ``multiprocessing.Queue`` (both expose ``.get(timeout=)`` / ``.put()``).
+    """
 
     worker_number: int
     log_level: int
@@ -13,8 +17,8 @@ class WebWorkerConfig:
     workers: int = 1
     bind: str = "127.0.0.1:8000"
     insecure_sockets: tuple = ()
-    shutdown_queue: Optional[Queue] = None
-    parent_shutdown_queue: Optional[Queue] = None
+    shutdown_queue: Optional[Any] = None
+    parent_shutdown_queue: Optional[Any] = None
     django_settings_module: Optional[str] = None
 
     def get_task_function(self) -> Callable:
@@ -38,12 +42,15 @@ class WebWorkerConfig:
 
 @dataclass
 class TaskWorkerConfig:
-    """Configuration for task queue worker."""
+    """Configuration for task queue worker.
+
+    Works with both subinterpreter and process pools (see ``WebWorkerConfig``).
+    """
 
     worker_number: int
     log_level: int
-    shutdown_queue: Optional[Queue] = None
-    parent_shutdown_queue: Optional[Queue] = None
+    shutdown_queue: Optional[Any] = None
+    parent_shutdown_queue: Optional[Any] = None
     django_settings_module: Optional[str] = None
 
     def get_task_function(self) -> Callable:

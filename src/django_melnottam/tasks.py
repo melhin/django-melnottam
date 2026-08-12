@@ -3,6 +3,7 @@ import signal
 import threading
 import time
 from concurrent.interpreters import Queue, QueueEmpty
+from queue import Empty
 from socket import socket
 from typing import Any, Callable, Optional
 
@@ -124,7 +125,7 @@ def close_sockets(
 
 
 def shutdown_monitor_task(
-    shutdown_queue: Queue,
+    shutdown_queue: Any,
     worker_number: int,
     shutdown_callback: Callable,
     worker_instance: Optional[Any] = None,
@@ -133,6 +134,9 @@ def shutdown_monitor_task(
 ) -> None:
     """
     Common shutdown monitoring task that waits for shutdown signals.
+
+    Works with both ``concurrent.interpreters.Queue`` (raises ``QueueEmpty``)
+    and ``multiprocessing.Queue`` (raises ``queue.Empty``) on timeout.
     """
     logger = logging.getLogger(__name__)
     try:
@@ -148,7 +152,7 @@ def shutdown_monitor_task(
                     else:
                         shutdown_callback()
                     break
-            except QueueEmpty:
+            except QueueEmpty, Empty:
                 if shutdown_event and shutdown_event.is_set():
                     logger.info(
                         "Shutdown event set for %s %d, exiting monitor", worker_type, worker_number
@@ -168,12 +172,14 @@ def web_worker_task(
     workers: int,
     bind: str,
     insecure_sockets: tuple,
-    shutdown_queue: Queue,
-    parent_shutdown_queue: Optional[Queue] = None,
+    shutdown_queue: Any,
+    parent_shutdown_queue: Optional[Any] = None,
     django_settings_module: Optional[str] = None,
 ) -> None:
     """
-    Web worker task to be executed in a subinterpreter using InterpreterPoolExecutor.
+    Web worker task executable in either a subinterpreter (InterpreterPoolExecutor)
+    or a subprocess (ProcessPoolExecutor). The queue arguments accept either
+    ``concurrent.interpreters.Queue`` or ``multiprocessing.Queue``.
     """
     logger = setup_worker_logging(worker_number, log_level, "Web")
     logger.info("Starting web worker: %d", worker_number)
@@ -252,12 +258,14 @@ def web_worker_task(
 def task_worker_task(
     worker_number: int,
     log_level: int,
-    shutdown_queue: Queue,
-    parent_shutdown_queue: Optional[Queue] = None,
+    shutdown_queue: Any,
+    parent_shutdown_queue: Optional[Any] = None,
     django_settings_module: Optional[str] = None,
 ) -> None:
     """
-    Task worker task to be executed in a subinterpreter using InterpreterPoolExecutor.
+    Task worker task executable in either a subinterpreter (InterpreterPoolExecutor)
+    or a subprocess (ProcessPoolExecutor). The queue arguments accept either
+    ``concurrent.interpreters.Queue`` or ``multiprocessing.Queue``.
     """
     logger = setup_worker_logging(worker_number, log_level, "Task")
     logger.info("Starting task worker: %d", worker_number)
