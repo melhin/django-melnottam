@@ -1,7 +1,7 @@
 """Integration tests for the process-pool backend.
 
 Unlike test_pool_manager.py (which mocks the executor), these tests
-actually start a real ProcessPoolExecutor and run a real task_worker_task
+actually start a real ProcessPoolExecutor and run a real command_worker_task
 in a subprocess. They verify the end-to-end wiring of the PROCESS backend.
 
 These tests require Django + django_tasks_db to be importable, so they
@@ -13,8 +13,9 @@ import time
 
 import pytest
 
-from django_melnottam.config import TaskWorkerConfig
-from django_melnottam.manager import PoolManager, PoolType
+from django_melnottam.backends import PoolType
+from django_melnottam.config import CommandWorkerConfig
+from django_melnottam.manager import PoolManager
 
 
 def _task_deps_available() -> bool:
@@ -54,15 +55,18 @@ def cleanup_manager():
 
 
 def test_process_manager_starts_and_shuts_down_cleanly(cleanup_manager):
-    """Process backend can start a task worker and shut it down gracefully."""
+    """Process backend can start a command worker and shut it down gracefully."""
     manager = PoolManager(max_workers=1, pool_type=PoolType.PROCESS)
     cleanup_manager.append(manager)
 
-    config = TaskWorkerConfig(worker_number=1, log_level=logging.WARNING)
+    config = CommandWorkerConfig(
+        worker_number=1,
+        log_level=logging.WARNING,
+        command="django.core.management.commands.check",
+    )
     manager.start_worker(config)
 
-    assert len(manager.futures) == 1
-    assert len(manager.shutdown_queues) == 1
+    assert len(manager.workers) == 1
 
     time.sleep(0.5)
     manager.shutdown(timeout=5.0)
@@ -79,10 +83,14 @@ def test_process_manager_context_manager(cleanup_manager):
         assert manager.executor is not None
         assert manager.pool_type is PoolType.PROCESS
 
-        config = TaskWorkerConfig(worker_number=1, log_level=logging.WARNING)
+        config = CommandWorkerConfig(
+            worker_number=1,
+            log_level=logging.WARNING,
+            command="django.core.management.commands.check",
+        )
         manager.start_worker(config)
 
-        assert len(manager.futures) == 1
+        assert len(manager.workers) == 1
         time.sleep(0.3)
 
     assert manager._shutdown_requested
@@ -93,7 +101,11 @@ def test_process_manager_rapid_shutdown(cleanup_manager):
     manager = PoolManager(max_workers=1, pool_type=PoolType.PROCESS)
     cleanup_manager.append(manager)
 
-    config = TaskWorkerConfig(worker_number=1, log_level=logging.WARNING)
+    config = CommandWorkerConfig(
+        worker_number=1,
+        log_level=logging.WARNING,
+        command="django.core.management.commands.check",
+    )
     manager.start_worker(config)
 
     time.sleep(0.3)

@@ -1,5 +1,10 @@
-from dataclasses import dataclass
-from typing import Any, Callable, Optional
+from dataclasses import dataclass, field, fields
+from typing import Any, Optional
+
+
+def _task_kwargs(config: Any) -> dict[str, Any]:
+    """Return the dataclass fields as kwargs, preserving object identity."""
+    return {f.name: getattr(config, f.name) for f in fields(config)}
 
 
 @dataclass
@@ -7,8 +12,9 @@ class WebWorkerConfig:
     """Configuration for WSGI application worker.
 
     Works with both subinterpreter and process pools: ``shutdown_queue``
-    and ``parent_shutdown_queue`` accept either ``concurrent.interpreters.Queue``
-    or ``multiprocessing.Queue`` (both expose ``.get(timeout=)`` / ``.put()``).
+    and ``shutdown_notification_queue`` accept either
+    ``concurrent.interpreters.Queue`` or ``multiprocessing.Queue`` (both
+    expose ``.get(timeout=)`` / ``.put()``).
     """
 
     worker_number: int
@@ -18,51 +24,32 @@ class WebWorkerConfig:
     bind: str = "127.0.0.1:8000"
     insecure_sockets: tuple = ()
     shutdown_queue: Optional[Any] = None
-    parent_shutdown_queue: Optional[Any] = None
+    shutdown_notification_queue: Optional[Any] = None
     django_settings_module: Optional[str] = None
 
-    def get_task_function(self) -> Callable:
-        from .tasks import web_worker_task
-
-        return web_worker_task
-
-    def get_task_kwargs(self) -> dict:
-        return {
-            "worker_number": self.worker_number,
-            "log_level": self.log_level,
-            "application_path": self.application_path,
-            "workers": self.workers,
-            "bind": self.bind,
-            "insecure_sockets": self.insecure_sockets,
-            "shutdown_queue": self.shutdown_queue,
-            "parent_shutdown_queue": self.parent_shutdown_queue,
-            "django_settings_module": self.django_settings_module,
-        }
+    def get_task_kwargs(self) -> dict[str, Any]:
+        return _task_kwargs(self)
 
 
 @dataclass
-class TaskWorkerConfig:
-    """Configuration for task queue worker.
+class CommandWorkerConfig:
+    """Configuration for a management-command worker.
 
-    Works with both subinterpreter and process pools (see ``WebWorkerConfig``).
+    ``worker_factory`` is optional. When omitted, the worker runs the command
+    via ``call_command`` and the command must exit on its own. When provided,
+    it must return an object with ``run()`` and ``shutdown()`` methods, which
+    allows graceful shutdown via the worker's shutdown queue.
     """
 
     worker_number: int
     log_level: int
+    command: str
+    args: tuple[str, ...] = ()
+    options: dict[str, Any] = field(default_factory=dict)
+    worker_factory: Optional[Any] = None
     shutdown_queue: Optional[Any] = None
-    parent_shutdown_queue: Optional[Any] = None
+    shutdown_notification_queue: Optional[Any] = None
     django_settings_module: Optional[str] = None
 
-    def get_task_function(self) -> Callable:
-        from .tasks import task_worker_task
-
-        return task_worker_task
-
-    def get_task_kwargs(self) -> dict:
-        return {
-            "worker_number": self.worker_number,
-            "log_level": self.log_level,
-            "shutdown_queue": self.shutdown_queue,
-            "parent_shutdown_queue": self.parent_shutdown_queue,
-            "django_settings_module": self.django_settings_module,
-        }
+    def get_task_kwargs(self) -> dict[str, Any]:
+        return _task_kwargs(self)

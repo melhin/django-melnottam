@@ -9,92 +9,12 @@ import threading
 from queue import Empty
 from unittest.mock import MagicMock
 
-from django_melnottam.config import TaskWorkerConfig, WebWorkerConfig
 from django_melnottam.tasks import (
     cleanup_thread,
     close_sockets,
     create_shutdown_monitor_thread,
-    setup_worker_logging,
     shutdown_monitor_task,
 )
-
-
-# ----------------------------------------------------------------------
-# Configs
-# ----------------------------------------------------------------------
-def test_task_worker_config_get_task_function():
-    """TaskWorkerConfig resolves to the task_worker_task function."""
-    from django_melnottam.tasks import task_worker_task
-
-    cfg = TaskWorkerConfig(worker_number=1, log_level=20)
-    assert cfg.get_task_function() is task_worker_task
-
-
-def test_task_worker_config_get_task_kwargs():
-    """get_task_kwargs surfaces every field the task function expects."""
-    cfg = TaskWorkerConfig(
-        worker_number=3,
-        log_level=logging.DEBUG,
-        django_settings_module="my.settings",
-    )
-    kw = cfg.get_task_kwargs()
-    assert kw == {
-        "worker_number": 3,
-        "log_level": logging.DEBUG,
-        "shutdown_queue": None,
-        "parent_shutdown_queue": None,
-        "django_settings_module": "my.settings",
-    }
-
-
-def test_web_worker_config_get_task_function():
-    """WebWorkerConfig resolves to the web_worker_task function."""
-    from django_melnottam.tasks import web_worker_task
-
-    cfg = WebWorkerConfig(worker_number=1, log_level=20, application_path="app.wsgi:application")
-    assert cfg.get_task_function() is web_worker_task
-
-
-def test_web_worker_config_get_task_kwargs_includes_sockets():
-    """get_task_kwargs forwards insecure_sockets and bind to the task."""
-    sockets = (1, 2, 3, 4)
-    cfg = WebWorkerConfig(
-        worker_number=2,
-        log_level=logging.INFO,
-        application_path="app.wsgi:application",
-        workers=4,
-        bind="0.0.0.0:8000",
-        insecure_sockets=sockets,
-    )
-    kw = cfg.get_task_kwargs()
-    assert kw["insecure_sockets"] == sockets
-    assert kw["bind"] == "0.0.0.0:8000"
-    assert kw["workers"] == 4
-    assert kw["application_path"] == "app.wsgi:application"
-
-
-def test_configs_accept_either_queue_type():
-    """The generalized queue fields accept any object (interpreter or mp queue)."""
-    fake_q = MagicMock()
-    cfg = TaskWorkerConfig(
-        worker_number=1,
-        log_level=20,
-        shutdown_queue=fake_q,
-        parent_shutdown_queue=fake_q,
-    )
-    assert cfg.shutdown_queue is fake_q
-    assert cfg.parent_shutdown_queue is fake_q
-
-
-# ----------------------------------------------------------------------
-# setup_worker_logging
-# ----------------------------------------------------------------------
-def test_setup_worker_logging_returns_named_logger():
-    """The logger name encodes worker type and number."""
-    logger = setup_worker_logging(5, logging.WARNING, "Web")
-    assert logger.name == "worker.web.5"
-    assert logger.level == logging.WARNING
-    assert logger.handlers, "expected a handler attached"
 
 
 # ----------------------------------------------------------------------

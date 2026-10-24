@@ -2,7 +2,9 @@ from typing import Any
 
 from django_prodserver.backends.base import BaseServerBackend
 
-from django_melnottam.manager import PoolType, run_application
+from django_melnottam.application import run_application
+from django_melnottam.backends import PoolType
+from django_melnottam.workers import CommandSpec
 
 
 class ProcessWorkerServer(BaseServerBackend):
@@ -23,15 +25,31 @@ class ProcessWorkerServer(BaseServerBackend):
     Configuration example in settings.py:
 
         PRODUCTION_PROCESSES = {
-            "web-with-task-worker": {
+            "web-with-command-workers": {
                 "BACKEND": "django_melnottam.prodserver_backends.process.ProcessWorkerServer",
                 "ARGS": {
                     "workers": 4,
-                    "task_workers": 2,
                     "bind": "0.0.0.0:8000",
+                    "app_path": "myapp.wsgi:application",
+                    "django_settings_module": "myapp.settings",
+                    "command_workers": [
+                        {
+                            "command": "myapp.management.commands.send_emails",
+                            "instances": 1,
+                        },
+                        {
+                            "command": "db_worker",
+                            "options": {},
+                            "instances": 2,
+                        },
+                    ],
                 },
             },
         }
+
+    The process backend does not require ``worker_factory``: any command still
+    running after the graceful shutdown timeout is terminated via
+    ``ProcessPoolExecutor.terminate_workers()``.
     """
 
     def __init__(self, **server_args: Any) -> None:
@@ -39,15 +57,14 @@ class ProcessWorkerServer(BaseServerBackend):
         super().__init__(**server_args)
 
     def start_server(self, *args, **kwargs):
-        """
-        Start the application using process-pool workers.
-        """
-        # Set defaults and merge with provided args
+        """Start the application using process-pool workers."""
         workers = self.melnottam_args.get("workers", 4)
-        task_workers = self.melnottam_args.get("task_workers", 2)
         bind = self.melnottam_args.get("bind", "0.0.0.0:8000")
         app_path = self.melnottam_args.get("app_path")
         django_settings_module = self.melnottam_args.get("django_settings_module")
+        command_workers = [
+            CommandSpec.from_dict(spec) for spec in self.melnottam_args.get("command_workers", [])
+        ]
 
         if not app_path:
             raise ValueError("'app_path' is required in ARGS. Example: 'myapp.wsgi:application'")
@@ -59,8 +76,8 @@ class ProcessWorkerServer(BaseServerBackend):
         run_application(
             app_path=app_path,
             workers=workers,
-            task_workers=task_workers,
             bind=bind,
             django_settings_module=django_settings_module,
+            command_workers=command_workers,
             pool_type=PoolType.PROCESS,
         )

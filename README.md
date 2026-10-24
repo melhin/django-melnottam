@@ -1,22 +1,17 @@
 # Django Melnottam
 
-⚠️ **EXPERIMENTAL** — This library is still in early development. APIs may change without notice. Use with caution in production.
+⚠️ **EXPERIMENTAL** — This library is in early development. APIs may change without notice.
 
-A Python package for running Django web and task workers from a single process, using either Python 3.14+ subinterpreters (`InterpreterPoolExecutor`) or OS processes (`ProcessPoolExecutor`). Pick the isolation model that fits your workload.
+Run Django web workers and management-command workers from one process, using either Python 3.14+ subinterpreters (`InterpreterPoolExecutor`) or OS processes (`ProcessPoolExecutor`).
 
-## Intention
+## What it does
 
-Django deployment usually means juggling separate services for web and background tasks. `django-melnottam` collapses them into one process manager with sensible defaults — `django-tasks-db` for task queuing and `django-prodserver` for the production server — so you get a plug-and-play setup that drops into an existing Django project.
+`django-melnottam` gives you one process manager for:
 
-## Overview
-
-`django-melnottam` runs workers through a pluggable pool backend (`PoolType.INTERPRETER` or `PoolType.PROCESS`) and gives you:
-
-- **Web Workers** — ASGI/WSGI application servers powered by Hypercorn
-- **Task Workers** — Django task queue workers backed by `django-tasks-db`
-- **Two Isolation Models** — subinterpreters for low-overhead, in-process isolation; processes for full memory isolation and C-extension compatibility
-- **Graceful Shutdown** — coordinated shutdown with timeout handling
-- **Signal Management** — proper SIGINT handling and cleanup
+- **Web workers** — ASGI/WSGI application servers powered by Hypercorn.
+- **Command workers** — any Django management command, run N times.
+- **Two isolation models** — subinterpreters for low overhead, processes for full memory isolation.
+- **Graceful shutdown** — queue-based stop signals, with process termination as a fallback.
 
 ## Requirements
 
@@ -26,38 +21,23 @@ Django deployment usually means juggling separate services for web and backgroun
 - `django-prodserver >= 2.4.0`
 - `hypercorn >= 0.18.0`
 
-> **Note on the process backend:** It uses the `fork` start method so duplicated socket file descriptors are inherited by worker subprocesses. On platforms where `fork` is unavailable (e.g. Windows, macOS 3.14+), web workers will not start correctly — task workers still work, or use the subinterpreter backend instead.
+> **Process backend note:** It uses the `fork` start method so duplicated socket FDs are inherited by workers. On platforms without `fork` (e.g. Windows), web workers will not start; use the subinterpreter backend there.
 
 ## Installation
-
-### From Pip
 
 ```bash
 pip install django-melnottam
 ```
 
-## Preferred Deployment
+## Deployment with django-prodserver
 
-The bundled `django-prodserver` backend is the recommended way to deploy web and task workers together.
-
-### Deployment Command
-
-```bash
-BIND_ADDRESS="0.0.0.0:$PORT" WORKERS="$WORKERS" TASK_WORKERS="$INSTANCE_TASK_WORKERS" python manage.py prodserver web-with-task-worker
-```
-
-### Configuration in Django Settings
-
-Choose the backend that matches your isolation needs. Both accept the same `ARGS`:
+If you use `db_worker`, add the task backend first:
 
 ```python
-from django_melnottam.config import PositiveIntegerValue, Value
-
 INSTALLED_APPS = [
     # ...
     "django_tasks_db",
     "django_prodserver",
-    # ...
 ]
 
 TASKS = {
@@ -66,77 +46,141 @@ TASKS = {
         "QUEUES": ["default"],
     }
 }
+```
 
-# Production process configuration with command-line parameter support
+Then configure the server:
+
+For Multiprocessing
+```python
 PRODUCTION_PROCESSES = {
-    "web-with-task-worker": {
-        # Subinterpreter backend (default, lower overhead):
+            "web-with-command-workers": {
+                "BACKEND": "django_melnottam.prodserver_backends.process.ProcessWorkerServer",
+                "ARGS": {
+                    "workers": 2,
+                    "bind": "0.0.0.0:8000",
+                    "app_path": "myapp.asgi:application",
+                    "django_settings_module": "myapp.settings",
+                    "command_workers": [
+                        {
+                            # Provided you have the django_tasks backend installed.
+                            "command": "db_worker",
+                            # Not doing this causes duplicate workers being loaded,
+                            # So might as well be careful about it.
+                            "options": {"reload": False},
+                            "instances":1,
+                        },
+                    ],
+                },
+            },
+        }
+
+
+```
+
+For Subinterpreters (which is still experimental as the subinterpreter eosystem is still changing)
+```python
+PRODUCTION_PROCESSES = {
+    "web-with-command-workers": {
         "BACKEND": "django_melnottam.prodserver_backends.subinterpreter.SubinterpreterWorkerServer",
-        # Process backend (full process isolation):
-        "BACKEND": "django_melnottam.prodserver_backends.process.ProcessWorkerServer",
-        # Choose one from above.
         "ARGS": {
             "app_path": "myapp.wsgi:application",
             "django_settings_module": "myapp.settings",
-            "workers": WORKERS,
-            "task_workers": TASK_WORKERS,
-            "bind": BIND_ADDRESS,
+            "workers": 4,
+            "bind": "0.0.0.0:8000",
+            "command_workers": [
+                {
+                    "command": "myapp.management.commands.send_emails",
+                    "instances": 1,
+                },
+                {
+                    "command": "django_tasks_db.management.commands.db_worker",
+                    "options": {"queue_names": ["default"]},
+                    "instances": 2,
+                    "worker_factory": "django_melnottam.tasks.db_worker_factory",
+                },
+            ],
         },
     },
 }
 ```
 
-### Environment Variables
+Run it with:
 
-- `PORT` — port to bind to (e.g. `8000`)
-- `WORKERS` — number of web workers (e.g. `4`)
-- `INSTANCE_TASK_WORKERS` — number of task workers (e.g. `2`)
+```bash
+python manage.py prodserver web-with-command-workers
+```
 
-## Usage
+Use `django_melnottam.prodserver_backends.process.ProcessWorkerServer` for the process backend.
 
-### Command Line Interface
+## Command workers
+
+Each entry in `command_workers` describes one management command:
+
+- `command` — explicit dotted path to the command module.
+- `args` — positional/CLI-style arguments (optional).
+- `options` — keyword options passed to `call_command` (optional).
+- `instances` — number of copies to run (default `1`).
+- `worker_factory` — optional dotted path to a factory returning a stoppable object.
+
+Without `worker_factory`, the worker runs `call_command(...)` and must exit on its own. This is ideal for one-shot commands.
+
+For long-running commands like `db_worker`, provide a factory. The bundled `django_melnottam.tasks.db_worker_factory` returns a `django_tasks_db` worker that can be stopped through the shutdown queue.
+
+The subinterpreter backend cannot force-stop a running command, so long-running commands there need a factory. The process backend does not require one: it terminates any remaining workers with `ProcessPoolExecutor.terminate_workers()`.
+
+## CLI
 
 ```bash
 django-melnottam-cli <application> [options]
 ```
 
-#### Arguments
+- `-w, --workers` — number of web workers (default `2`)
+- `-c, --command-workers` — JSON list of command specs (default `[]`)
+- `-b, --bind` — bind address (default `0.0.0.0:9001`)
+- `-s, --settings` — Django settings module
+- `-p, --pool` — `interpreter` or `process` (default `interpreter`)
+- `-v, --verbose` — debug logging
 
-- `application` — path to your WSGI application (e.g. `myapp.wsgi:application`)
-
-#### Options
-
-- `-w, --workers` — number of web workers (default: `2`)
-- `-t, --task-workers` — number of task workers (default: `1`)
-- `-b, --bind` — bind address for the web server (default: `0.0.0.0:9001`)
-- `-s, --settings` — Django settings module (default: from `DJANGO_SETTINGS_MODULE`)
-- `-v, --verbose` — enable debug logging
-
-#### Example
+Example:
 
 ```bash
 django-melnottam-cli myapp.wsgi:application \
   --workers 4 \
-  --task-workers 2 \
   --bind 0.0.0.0:8000 \
-  --settings myapp.settings.production
+  --settings myapp.settings \
+  --command-workers '[{"command": "myapp.management.commands.send_emails", "instances": 1}]'
 ```
 
-### Programmatic Usage
+## Programmatic usage
 
 ```python
-from django_melnottam.manager import run_application, PoolType
+from django_melnottam.application import run_application
+from django_melnottam.backends import PoolType
+from django_melnottam.workers import CommandSpec
 
 run_application(
     app_path="myapp.wsgi:application",
     workers=4,
-    task_workers=2,
     bind="0.0.0.0:8000",
     django_settings_module="myapp.settings",
     pool_type=PoolType.INTERPRETER,  # or PoolType.PROCESS
+    command_workers=[
+        CommandSpec(
+            command="myapp.management.commands.send_emails",
+            instances=1,
+        ),
+        CommandSpec(
+            command="django_tasks_db.management.commands.db_worker",
+            options={"queue_names": ["default"]},
+            instances=2,
+            worker_factory="django_melnottam.tasks.db_worker_factory",
+        ),
+    ],
 )
 ```
 
 ## LLM Disclosure
 
-LLMs were used for scaffolding boilerplate, drafting tests, shaping the `TASKS` config structure, and writing documentation (including this README). The design and idea were mostly not LLM suggestions. LLM output was reviewed and modified where needed.
+The project idea and design are the author's. LLMs assisted with
+scaffolding boilerplate, drafting tests, and writing documentation
+(including this README). All generated output was reviewed and edited.

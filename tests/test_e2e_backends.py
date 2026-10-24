@@ -120,15 +120,24 @@ def _spawn_server(pool_type: str, port: int, db_path: Path) -> subprocess.Popen:
     driver = textwrap.dedent(
         f"""
         import sys
-        from django_melnottam.manager import PoolType, run_application
+        from django_melnottam.application import run_application
+        from django_melnottam.backends import PoolType
+        from django_melnottam.workers import CommandSpec
 
         run_application(
             app_path="e2e_app.wsgi:application",
             workers=1,
-            task_workers=1,
             bind="127.0.0.1:{port}",
             django_settings_module="e2e_settings",
             pool_type=PoolType("{pool_type}"),
+            command_workers=[
+                CommandSpec(
+                    command="django_tasks_db.management.commands.db_worker",
+                    options={{"queue_names": ["default"]}},
+                    instances=1,
+                    worker_factory="django_melnottam.tasks.db_worker_factory",
+                )
+            ],
         )
         sys.exit(0)
         """

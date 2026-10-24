@@ -1,4 +1,5 @@
 import argparse
+import json
 import logging
 import os
 import sys
@@ -7,7 +8,9 @@ import django
 from django.conf import settings
 from rich.logging import RichHandler
 
-from django_melnottam.manager import PoolType, run_application
+from django_melnottam.application import run_application
+from django_melnottam.backends import PoolType
+from django_melnottam.workers import CommandSpec
 
 logging.basicConfig(
     level=logging.INFO,
@@ -57,11 +60,12 @@ def main():
         type=str,
     )
     parser.add_argument(
-        "-t",
-        "--task-workers",
-        help="Number of task workers",
-        default=1,
-        type=int,
+        "-c",
+        "--command-workers",
+        help="JSON list of command worker specs, e.g. "
+        '\'[{"command": "myapp.management.commands.send_emails", "instances": 1}]\'',
+        default="[]",
+        type=str,
     )
     parser.add_argument(
         "-s",
@@ -95,14 +99,16 @@ def main():
     # Setup Django
     setup_django()
 
+    command_workers = [CommandSpec.from_dict(spec) for spec in json.loads(args.command_workers)]
+
     # Run the application
     run_application(
         app_path=args.application,
         workers=args.workers,
-        task_workers=args.task_workers,
         bind=args.bind,
         django_settings_module=args.settings,
         pool_type=PoolType(args.pool),
+        command_workers=command_workers,
     )
     sys.exit(0)
 

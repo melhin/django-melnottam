@@ -3,8 +3,9 @@ import time
 
 import pytest
 
-from django_melnottam.config import TaskWorkerConfig
-from django_melnottam.manager import InterpreterPoolManager
+from django_melnottam.backends import PoolType
+from django_melnottam.config import CommandWorkerConfig
+from django_melnottam.manager import PoolManager
 
 
 @pytest.fixture(autouse=True)
@@ -30,15 +31,18 @@ def cleanup_manager():
 
 
 def test_manager_starts_and_shuts_down_cleanly(cleanup_manager):
-    """Test that manager can start task workers and shutdown gracefully."""
-    manager = InterpreterPoolManager(max_workers=1)
+    """Test that manager can start command workers and shutdown gracefully."""
+    manager = PoolManager(max_workers=1, pool_type=PoolType.INTERPRETER)
     cleanup_manager.append(manager)
 
-    config = TaskWorkerConfig(worker_number=1, log_level=logging.WARNING)
+    config = CommandWorkerConfig(
+        worker_number=1,
+        log_level=logging.WARNING,
+        command="django.core.management.commands.check",
+    )
     manager.start_worker(config)
 
-    assert len(manager.futures) == 1
-    assert len(manager.shutdown_queues) == 1
+    assert len(manager.workers) == 1
 
     time.sleep(0.5)
     manager.shutdown(timeout=3.0)
@@ -48,17 +52,21 @@ def test_manager_starts_and_shuts_down_cleanly(cleanup_manager):
 
 def test_manager_context_manager_with_workers(cleanup_manager):
     """Test context manager properly cleans up workers."""
-    manager = InterpreterPoolManager(max_workers=1)
+    manager = PoolManager(max_workers=1, pool_type=PoolType.INTERPRETER)
     cleanup_manager.append(manager)
 
     with manager:
         assert manager.executor is not None
         assert manager.max_workers == 1
 
-        config = TaskWorkerConfig(worker_number=1, log_level=logging.WARNING)
+        config = CommandWorkerConfig(
+            worker_number=1,
+            log_level=logging.WARNING,
+            command="django.core.management.commands.check",
+        )
         manager.start_worker(config)
 
-        assert len(manager.futures) == 1
+        assert len(manager.workers) == 1
 
         time.sleep(0.3)
 
@@ -68,10 +76,14 @@ def test_manager_context_manager_with_workers(cleanup_manager):
 
 def test_rapid_shutdown(cleanup_manager):
     """Test that shutdown handles rapid calls gracefully."""
-    manager = InterpreterPoolManager(max_workers=1)
+    manager = PoolManager(max_workers=1, pool_type=PoolType.INTERPRETER)
     cleanup_manager.append(manager)
 
-    config = TaskWorkerConfig(worker_number=1, log_level=logging.WARNING)
+    config = CommandWorkerConfig(
+        worker_number=1,
+        log_level=logging.WARNING,
+        command="django.core.management.commands.check",
+    )
     manager.start_worker(config)
 
     time.sleep(0.3)

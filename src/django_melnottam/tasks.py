@@ -1,3 +1,4 @@
+import importlib
 import logging
 import signal
 import threading
@@ -173,7 +174,7 @@ def web_worker_task(
     bind: str,
     insecure_sockets: tuple,
     shutdown_queue: Any,
-    parent_shutdown_queue: Optional[Any] = None,
+    shutdown_notification_queue: Optional[Any] = None,
     django_settings_module: Optional[str] = None,
 ) -> None:
     """
@@ -201,8 +202,8 @@ def web_worker_task(
         logger.info("Shutdown signal received")
         worker_shutdown_event.set()
 
-        if parent_shutdown_queue:
-            parent_shutdown_queue.put("shutdown")
+        if shutdown_notification_queue:
+            shutdown_notification_queue.put("shutdown")
 
     logger.info("Starting hypercorn worker")
     _insecure_sockets = []
@@ -235,15 +236,15 @@ def web_worker_task(
 
     except (OSError, RuntimeError) as e:
         logger.exception("Error in web worker: %s", e)
-        if parent_shutdown_queue:
+        if shutdown_notification_queue:
             try:
-                parent_shutdown_queue.put("shutdown")
+                shutdown_notification_queue.put("shutdown")
             except Exception:
                 pass
     except Exception as e:
         logger.exception("Unexpected error in web worker: %s", e)
-        if parent_shutdown_queue:
-            parent_shutdown_queue.put("shutdown")
+        if shutdown_notification_queue:
+            shutdown_notification_queue.put("shutdown")
     finally:
         logger.debug("Starting worker cleanup")
         worker_shutdown_event.set()
@@ -255,71 +256,111 @@ def web_worker_task(
         logger.debug("Worker cleanup complete")
 
 
-def task_worker_task(
+def _resolve_factory(factory: Any) -> Callable:
+    """Resolve a dotted path to a callable, or return the callable as-is."""
+    if isinstance(factory, str):
+        module_path, _, attr = factory.rpartition(".")
+        module = importlib.import_module(module_path)
+        return getattr(module, attr)
+    return factory
+
+
+def db_worker_factory(
+    *,
+    command: str,
+    args: tuple[str, ...],
+    options: dict[str, Any],
+    worker_number: int,
+) -> Any:
+    """Build a stoppable ``django_tasks_db`` worker."""
+    from django_tasks_db.management.commands import db_worker
+
+    return db_worker.Worker(
+        queue_names=options.get("queue_names", ["default"]),
+        interval=options.get("interval", 1),
+        batch=options.get("batch", False),
+        backend_name=options.get("backend_name", "default"),
+        startup_delay=options.get("startup_delay", True),
+        max_tasks=options.get("max_tasks"),
+        worker_id=f"task_worker_{worker_number}",
+        excluded_queue_names=[],
+    )
+
+
+def command_worker_task(
     worker_number: int,
     log_level: int,
-    shutdown_queue: Any,
-    parent_shutdown_queue: Optional[Any] = None,
+    command: str,
+    args: tuple[str, ...],
+    options: dict[str, Any],
+    worker_factory: Optional[Any] = None,
+    shutdown_queue: Any = None,
+    shutdown_notification_queue: Optional[Any] = None,
     django_settings_module: Optional[str] = None,
 ) -> None:
+    """Run a management command or a stoppable command worker.
+
+    Works with both subinterpreter and process pools. The queue arguments
+    accept either ``concurrent.interpreters.Queue`` or
+    ``multiprocessing.Queue``.
     """
-    Task worker task executable in either a subinterpreter (InterpreterPoolExecutor)
-    or a subprocess (ProcessPoolExecutor). The queue arguments accept either
-    ``concurrent.interpreters.Queue`` or ``multiprocessing.Queue``.
-    """
-    logger = setup_worker_logging(worker_number, log_level, "Task")
-    logger.info("Starting task worker: %d", worker_number)
+    logger = setup_worker_logging(worker_number, log_level, "Command")
+    logger.info("Starting command worker: %d (%s)", worker_number, command)
+
+    if django_settings_module:
+        import os
+
+        os.environ.setdefault("DJANGO_SETTINGS_MODULE", django_settings_module)
+    django.setup(set_prefix=False)
+
+    # Raw mode: run the management command to completion.
+    if worker_factory is None:
+        try:
+            from django.core.management import call_command
+
+            call_command(command, *args, **options)
+        except Exception as exc:
+            logger.exception("Command %s failed: %s", command, exc)
+            if shutdown_notification_queue:
+                shutdown_notification_queue.put("shutdown")
+        return
+
+    # Factory mode: build a stoppable worker and run it.
+    factory = _resolve_factory(worker_factory)
+    worker = factory(
+        command=command,
+        args=args,
+        options=options,
+        worker_number=worker_number,
+    )
 
     thread_shutdown_event = threading.Event()
     signal_thread = None
 
-    def task_worker_shutdown_callback(worker):
-        """Callback to handle task worker shutdown."""
-        worker.shutdown(signal.SIGINT, None)
+    def shutdown_callback(w):
+        w.shutdown(signal.SIGINT, None)
         thread_shutdown_event.set()
 
     try:
-        # Setup Django with provided settings module or use default
-        if django_settings_module:
-            import os
-
-            os.environ.setdefault("DJANGO_SETTINGS_MODULE", django_settings_module)
-
-        django.setup(set_prefix=False)
-        from django_tasks_db.management.commands import db_worker
-
-        worker = db_worker.Worker(
-            queue_names=["default"],
-            interval=1,
-            batch=False,
-            backend_name="default",
-            startup_delay=True,
-            max_tasks=None,
-            worker_id=f"task_worker_{worker_number}",
-        )
-
         signal_thread = create_shutdown_monitor_thread(
             shutdown_queue,
             worker_number,
-            task_worker_shutdown_callback,
+            shutdown_callback,
             worker,
-            "Task worker",
+            "Command worker",
             thread_shutdown_event,
         )
         signal_thread.start()
-
         worker.run()
-
     except (OSError, RuntimeError) as e:
-        logging.exception("Error in task worker: %s", e)
+        logger.exception("Error in command worker: %s", e)
     except Exception as exc:
-        logging.exception(f"Task worker errored: {exc}")
-        if parent_shutdown_queue:
-            parent_shutdown_queue.put("shutdown")
+        logger.exception("Command worker errored: %s", exc)
+        if shutdown_notification_queue:
+            shutdown_notification_queue.put("shutdown")
     finally:
-        logger.info("Task worker finished")
-
+        logger.info("Command worker finished")
         thread_shutdown_event.set()
         cleanup_thread(signal_thread, logger, timeout=None)
         time.sleep(0.1)
-        logger.debug("Task worker cleanup complete")
+        logger.debug("Command worker cleanup complete")
