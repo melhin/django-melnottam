@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "django-melnottam"
-version = "0.1.2rc0"
+version = "0.1.2rc1"
 description = "A Python package for managing Django application workers using InterpreterPoolExecutor"
 readme = "README.md"
 requires-python = ">=3.14"
@@ -57,10 +57,10 @@ dev = [
 django-melnottam-cli = "django_melnottam.cli:main"
 
 [project.urls]
-Homepage = "https://codeberg.org/melhin/django-melnottam"
-Repository = "https://codeberg.org/melhin/django-melnottam"
-Documentation = "https://codeberg.org/melhin/django-melnottam"
-Issues = "https://codeberg.org/melhin/django-melnottam/issues"
+Homepage = "https://github.com/melhin/django-melnottam"
+Repository = "https://github.com/melhin/django-melnottam"
+Documentation = "https://github.com/melhin/django-melnottam"
+Issues = "https://github.com/melhin/django-melnottam/issues"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
