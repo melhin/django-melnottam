@@ -2,7 +2,7 @@
 
 ⚠️ **EXPERIMENTAL** — This library is in early development. APIs may change without notice.
 
-Run Django web workers and management-command workers from one process, using either Python 3.14+ subinterpreters (`InterpreterPoolExecutor`) or OS processes (`ProcessPoolExecutor`).
+Bundle Django web workers and management-command workers behind a unified interface, using either Python 3.14+ subinterpreters (`InterpreterPoolExecutor`) or `multiprocessing`-based processes (`ProcessPoolExecutor`).
 
 ## What it does
 
