@@ -138,8 +138,6 @@ dmypy.json
 Thumbs.db
 
 # Project specific
-.uv.lock
-uv.lock
 *.db
 jobs/
 cache/
