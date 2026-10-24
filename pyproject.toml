@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "django-melnottam"
-version = "0.1.1"
+version = "0.1.2rc0"
 description = "A Python package for managing Django application workers using InterpreterPoolExecutor"
 readme = "README.md"
 requires-python = ">=3.14"
 license = "MIT"
 authors = [
-    {name = "melhin", email = "melhin@duck.com"},
+    {name = "melhin", email = "me@nihlem.com"},
 ]
 keywords = [
     "django",
