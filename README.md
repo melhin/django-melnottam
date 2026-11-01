@@ -184,3 +184,9 @@ run_application(
 The project idea and design are the author's. LLMs assisted with
 scaffolding boilerplate, drafting tests, and writing documentation
 (including this README). All generated output was reviewed and edited.
+
+## License
+
+MIT License — see [LICENSE](LICENSE). The software is provided "as is",
+without warranty of any kind, and the authors are not liable for any
+claim, damages, or other liability arising from its use (or misuse).
